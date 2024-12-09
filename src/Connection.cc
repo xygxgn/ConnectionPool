@@ -37,5 +37,5 @@ MYSQL_RES* Connection::query(std::string sql)
         std::cout << mysql_error(conn_) << std::endl;
         return nullptr;
     }
-    return mysql_use_result(conn_);
+    return ::mysql_use_result(conn_);
 }
