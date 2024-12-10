@@ -21,6 +21,8 @@ ConnectionPool::ConnectionPool()
         ++connectionCount_;
     }
 
+    showdown_ = false;
+
     std::thread produce(std::bind(&ConnectionPool::produceConnectionTask, this));
     produce.detach();
     std::thread scanner(std::bind(&ConnectionPool::scannerConnectionTask, this));
@@ -29,6 +31,15 @@ ConnectionPool::ConnectionPool()
 
 ConnectionPool::~ConnectionPool()
 {
+    showdown_ = true;
+    cond_.notify_all();
+
+    std::unique_lock<std::mutex> locker(connectionQueueMutex_);
+    while (!connectionQueue_.empty())
+    {
+        delete connectionQueue_.front();
+        connectionQueue_.pop();
+    }
 }
 
 ConnectionPool* ConnectionPool::instance()
@@ -99,7 +110,7 @@ bool ConnectionPool::readParam(const std::string &path)
 std::shared_ptr<Connection> ConnectionPool::consumeConnection()
 {
     std::unique_lock<std::mutex> locker(connectionQueueMutex_);
-    while (connectionQueue_.empty())
+    while (!showdown_ && connectionQueue_.empty())
     {
         if (cond_.wait_for(locker, std::chrono::milliseconds(connectionTimeout_)) == std::cv_status::timeout)
         {
@@ -111,6 +122,9 @@ std::shared_ptr<Connection> ConnectionPool::consumeConnection()
         }
     }
 
+    if (showdown_)
+        return nullptr;
+
     std::shared_ptr<Connection> sp(connectionQueue_.front(), [&](Connection *conn){
         std::unique_lock<std::mutex> locker(connectionQueueMutex_);
         conn->refreshAliveTime();
@@ -119,15 +133,15 @@ std::shared_ptr<Connection> ConnectionPool::consumeConnection()
     connectionQueue_.pop();
     cond_.notify_all();
 
-    return sp;    
+    return sp;
 }
 
 void ConnectionPool::produceConnectionTask()
 {
-    for (;;)
+    while (!showdown_)
     {
         std::unique_lock<std::mutex> locker(connectionQueueMutex_);
-        while (!connectionQueue_.empty())
+        while (!showdown_ && !connectionQueue_.empty())
         {
             cond_.wait(locker);
         }
@@ -146,10 +160,9 @@ void ConnectionPool::produceConnectionTask()
 
 void ConnectionPool::scannerConnectionTask()
 {
-    for (;;)
+    while (!showdown_)
     {
         std::this_thread::sleep_for(std::chrono::seconds(maxIdleTime_));
-        std::unique_lock<std::mutex> locker(connectionQueueMutex_);
         while (connectionCount_ > initSize_)
         {
             Connection *p = connectionQueue_.front();

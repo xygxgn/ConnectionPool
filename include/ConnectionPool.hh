@@ -34,6 +34,8 @@ private:
     std::mutex connectionQueueMutex_;
     std::atomic<int> connectionCount_;
     std::condition_variable cond_;
+
+    std::atomic<bool> showdown_;
 };
 
 #endif

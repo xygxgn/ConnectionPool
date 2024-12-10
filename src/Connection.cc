@@ -23,7 +23,7 @@ bool Connection::update(std::string sql)
     if (::mysql_query(conn_, sql.c_str()))
     {
         LOG("update failed: " + sql);
-        std::cout << mysql_error(conn_) << std::endl;
+        std::cout << ::mysql_error(conn_) << std::endl;
         return false;
     }
     return true;
@@ -34,7 +34,7 @@ MYSQL_RES* Connection::query(std::string sql)
     if (::mysql_query(conn_, sql.c_str()))
     {
         LOG("query failed: " + sql);
-        std::cout << mysql_error(conn_) << std::endl;
+        std::cout << ::mysql_error(conn_) << std::endl;
         return nullptr;
     }
     return ::mysql_use_result(conn_);
